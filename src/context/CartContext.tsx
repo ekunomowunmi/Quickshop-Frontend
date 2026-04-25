@@ -1,4 +1,9 @@
-import React, {createContext, useContext, useMemo, useState} from 'react';
+import React, {createContext, useContext, useEffect, useMemo, useState} from 'react';
+import {
+  clearCart as clearCartStorage,
+  loadCart,
+  saveCart,
+} from '../utils/cartStorage';
 
 export type CartItem = {
   id: string;
@@ -22,6 +27,21 @@ const CartContext = createContext<CartContextValue | null>(null);
 
 export function CartProvider({children}: {children: React.ReactNode}) {
   const [items, setItems] = useState<CartItem[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const stored = await loadCart();
+      if (!cancelled) setItems(stored);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    saveCart(items).catch(() => {});
+  }, [items]);
 
   const value = useMemo<CartContextValue>(() => {
     const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
@@ -59,6 +79,7 @@ export function CartProvider({children}: {children: React.ReactNode}) {
 
     function clear() {
       setItems([]);
+      clearCartStorage().catch(() => {});
     }
 
     return {items, itemCount, total, addItem, increase, decrease, remove, clear};
