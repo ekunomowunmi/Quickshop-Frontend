@@ -1,172 +1,32 @@
-import React, {useEffect, useMemo, useState} from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import {
-  SafeAreaProvider,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
-import {getNearbyStores, NearbyStore} from './src/services/api';
+import 'react-native-gesture-handler';
+import React from 'react';
+import {NavigationContainer} from '@react-navigation/native';
+import {createNativeStackNavigator} from '@react-navigation/native-stack';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
+import NearbyStoresScreen from './src/screens/NearbyStoresScreen';
+import StoreProductsScreen from './src/screens/StoreProductsScreen';
+import type {RootStackParamList} from './src/types/navigation';
 
-function toNumber(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return undefined;
-}
-
-function extractDistanceMeters(store: NearbyStore): number | undefined {
-  return (
-    toNumber(store.distanceMeters) ??
-    toNumber(store.distance_meters) ??
-    toNumber(store.distance)
-  );
-}
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App() {
   return (
     <SafeAreaProvider>
-      <NearbyStores />
+      <NavigationContainer>
+        <Stack.Navigator initialRouteName="NearbyStores">
+          <Stack.Screen
+            name="NearbyStores"
+            component={NearbyStoresScreen}
+            options={{title: 'Nearby Stores'}}
+          />
+          <Stack.Screen
+            name="StoreProducts"
+            component={StoreProductsScreen}
+            options={({route}) => ({title: route.params.storeName})}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
     </SafeAreaProvider>
   );
 }
-
-function NearbyStores() {
-  const insets = useSafeAreaInsets();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [stores, setStores] = useState<NearbyStore[]>([]);
-
-  const sortedStores = useMemo(() => {
-    const copy = [...stores];
-    copy.sort((a, b) => {
-      const da = extractDistanceMeters(a) ?? Number.POSITIVE_INFINITY;
-      const db = extractDistanceMeters(b) ?? Number.POSITIVE_INFINITY;
-      return da - db;
-    });
-    return copy;
-  }, [stores]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function run() {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await getNearbyStores();
-        if (!cancelled) setStores(data);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? 'Failed to load stores.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return (
-    <View
-      style={[
-        styles.safe,
-        {paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 12)},
-      ]}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Nearby Stores</Text>
-        <Text style={styles.subtitle}>
-          Fetching from /stores/nearby?lat=6.45&amp;lng=3.4
-        </Text>
-      </View>
-
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" />
-          <Text style={styles.muted}>Loading stores…</Text>
-        </View>
-      ) : error ? (
-        <View style={styles.center}>
-          <Text style={styles.errorTitle}>Error</Text>
-          <Text style={styles.errorBody}>{error}</Text>
-          <Text style={styles.mutedHint}>
-            Make sure you replaced YOUR_LOCAL_IP in src/services/api.ts and your
-            backend is running.
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={sortedStores}
-          keyExtractor={(item, idx) => String(item.id ?? idx)}
-          contentContainerStyle={
-            sortedStores.length === 0 ? styles.emptyContainer : styles.list
-          }
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <Text style={styles.muted}>No stores found</Text>
-            </View>
-          }
-          renderItem={({item}) => {
-            const meters = extractDistanceMeters(item);
-            const km =
-              typeof meters === 'number'
-                ? Math.round((meters / 1000) * 10) / 10
-                : null;
-
-            return (
-              <View style={styles.card}>
-                <View style={styles.row}>
-                  <Text style={styles.name} numberOfLines={1}>
-                    {item.name}
-                  </Text>
-                  {km !== null ? (
-                    <Text style={styles.distance}>{km} km</Text>
-                  ) : null}
-                </View>
-                {item.address ? (
-                  <Text style={styles.address}>{item.address}</Text>
-                ) : null}
-              </View>
-            );
-          }}
-        />
-      )}
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  safe: {flex: 1, backgroundColor: '#fff'},
-  header: {paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8},
-  title: {fontSize: 24, fontWeight: '800', color: '#111'},
-  subtitle: {marginTop: 4, color: '#666'},
-  list: {paddingVertical: 8},
-  center: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16, gap: 8},
-  muted: {color: '#666'},
-  mutedHint: {marginTop: 6, color: '#666', textAlign: 'center'},
-  errorTitle: {fontSize: 18, fontWeight: '800', color: '#b00020'},
-  errorBody: {color: '#333', textAlign: 'center'},
-  emptyContainer: {flexGrow: 1},
-  card: {
-    marginHorizontal: 16,
-    marginVertical: 8,
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#ddd',
-    backgroundColor: '#fff',
-  },
-  row: {flexDirection: 'row', justifyContent: 'space-between', gap: 12},
-  name: {flex: 1, fontSize: 16, fontWeight: '800', color: '#111'},
-  distance: {fontWeight: '700', color: '#111'},
-  address: {marginTop: 6, color: '#555', lineHeight: 18},
-});
 
