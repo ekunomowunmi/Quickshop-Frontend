@@ -11,6 +11,8 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../types/navigation';
 import {getNearbyStores, NearbyStore} from '../services/api';
+import {useCart} from '../context/CartContext';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'NearbyStores'>;
 
@@ -33,6 +35,7 @@ function extractDistanceMeters(store: NearbyStore): number | undefined {
 
 export default function NearbyStoresScreen({navigation}: Props) {
   const insets = useSafeAreaInsets();
+  const {itemCount} = useCart();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stores, setStores] = useState<NearbyStore[]>([]);
@@ -75,11 +78,24 @@ export default function NearbyStoresScreen({navigation}: Props) {
         styles.safe,
         {paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 12)},
       ]}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Nearby Stores</Text>
-        <Text style={styles.subtitle}>
-          Tap a store to view products
-        </Text>
+      <View style={styles.topbar}>
+        <View style={styles.topbarLeft}>
+          <Text style={styles.topTitle}>Nearby Stores</Text>
+          <Text style={styles.topSubtitle}>Find groceries near you</Text>
+        </View>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Cart')}
+          activeOpacity={0.8}
+          style={styles.cartBtn}>
+          <Ionicons name="cart-outline" size={22} color="#374151" />
+          {itemCount > 0 ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {itemCount > 99 ? '99+' : String(itemCount)}
+              </Text>
+            </View>
+          ) : null}
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -122,16 +138,22 @@ export default function NearbyStoresScreen({navigation}: Props) {
                   navigation.navigate('StoreProducts', {storeId, storeName})
                 }>
                 <View style={styles.row}>
-                  <Text style={styles.name} numberOfLines={1}>
-                    {storeName}
-                  </Text>
+                  <View style={{flex: 1}}>
+                    <Text style={styles.name} numberOfLines={1}>
+                      {storeName}
+                    </Text>
+                    {item.address ? (
+                      <Text style={styles.address} numberOfLines={2}>
+                        {item.address}
+                      </Text>
+                    ) : null}
+                  </View>
                   {km !== null ? (
-                    <Text style={styles.distance}>{km} km</Text>
+                    <View style={styles.pill}>
+                      <Text style={styles.pillText}>{km} km</Text>
+                    </View>
                   ) : null}
                 </View>
-                {item.address ? (
-                  <Text style={styles.address}>{item.address}</Text>
-                ) : null}
               </TouchableOpacity>
             );
           }}
@@ -142,11 +164,44 @@ export default function NearbyStoresScreen({navigation}: Props) {
 }
 
 const styles = StyleSheet.create({
-  safe: {flex: 1, backgroundColor: '#fff'},
-  header: {paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8},
-  title: {fontSize: 24, fontWeight: '800', color: '#111'},
-  subtitle: {marginTop: 4, color: '#666'},
-  list: {paddingVertical: 8},
+  safe: {flex: 1, backgroundColor: '#F9FAFB'},
+  topbar: {
+    backgroundColor: '#fff',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#EEF2F7',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  topbarLeft: {flex: 1, paddingRight: 12},
+  topTitle: {fontSize: 22, fontWeight: '900', color: '#16A34A'},
+  topSubtitle: {marginTop: 2, fontSize: 12, color: '#6B7280', fontWeight: '600'},
+  cartBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
+    borderRadius: 999,
+    backgroundColor: '#16A34A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {color: '#fff', fontWeight: '900', fontSize: 11},
+  pressed: {opacity: 0.85},
+  list: {paddingHorizontal: 16, paddingVertical: 16, gap: 12},
   center: {
     flex: 1,
     alignItems: 'center',
@@ -159,17 +214,24 @@ const styles = StyleSheet.create({
   errorBody: {color: '#333', textAlign: 'center'},
   emptyContainer: {flexGrow: 1},
   card: {
-    marginHorizontal: 16,
-    marginVertical: 8,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#ddd',
+    borderColor: '#EEF2F7',
     backgroundColor: '#fff',
   },
   row: {flexDirection: 'row', justifyContent: 'space-between', gap: 12},
-  name: {flex: 1, fontSize: 16, fontWeight: '800', color: '#111'},
-  distance: {fontWeight: '700', color: '#111'},
-  address: {marginTop: 6, color: '#555', lineHeight: 18},
+  name: {fontSize: 16, fontWeight: '900', color: '#111827'},
+  address: {marginTop: 6, color: '#6B7280', lineHeight: 18, fontWeight: '600'},
+  pill: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(22,163,74,0.08)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(22,163,74,0.25)',
+  },
+  pillText: {color: '#16A34A', fontWeight: '900', fontSize: 12},
 });
 
