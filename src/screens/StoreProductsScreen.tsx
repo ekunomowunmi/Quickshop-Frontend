@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useCallback, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {useFocusEffect} from '@react-navigation/native';
 import type {RootStackParamList} from '../types/navigation';
 import {getProductsByStore, Product} from '../services/api';
 import {useCart} from '../context/CartContext';
@@ -34,27 +35,24 @@ export default function StoreProductsScreen({navigation, route}: Props) {
   const [error, setError] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function run() {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await getProductsByStore(storeId);
-        if (!cancelled) setProducts(data);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? 'Failed to load products.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  const loadProducts = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getProductsByStore(storeId);
+      setProducts(data);
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to load products.');
+    } finally {
+      setLoading(false);
     }
-
-    run();
-    return () => {
-      cancelled = true;
-    };
   }, [storeId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadProducts();
+    }, [loadProducts]),
+  );
 
   return (
     <View

@@ -11,11 +11,13 @@ import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../types/navigation';
 import {login} from '../services/api';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useAppMode} from '../context/AppModeContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 export default function LoginScreen({navigation}: Props) {
   const insets = useSafeAreaInsets();
+  const {setUser} = useAppMode();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,7 +27,8 @@ export default function LoginScreen({navigation}: Props) {
     setLoading(true);
     setError(null);
     try {
-      await login(phone.trim(), password);
+      const res = await login(phone.trim(), password);
+      setUser(res.user ?? null);
       navigation.reset({
         index: 0,
         routes: [{name: 'NearbyStores'}],

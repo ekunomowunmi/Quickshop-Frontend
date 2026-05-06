@@ -4,15 +4,19 @@ import {
   FlatList,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../types/navigation';
-import {getNearbyStores, NearbyStore} from '../services/api';
+import {getNearbyStoresSmart, NearbyStore} from '../services/api';
 import {useCart} from '../context/CartContext';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import {useAppMode} from '../context/AppModeContext';
+import {ModeToggle} from '../components/ModeToggle';
+import * as Location from 'expo-location';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'NearbyStores'>;
 
@@ -36,9 +40,12 @@ function extractDistanceMeters(store: NearbyStore): number | undefined {
 export default function NearbyStoresScreen({navigation}: Props) {
   const insets = useSafeAreaInsets();
   const {itemCount} = useCart();
+  const {mode, setMode, isStoreOwner} = useAppMode();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stores, setStores] = useState<NearbyStore[]>([]);
+  const [manualMode, setManualMode] = useState(false);
+  const [address, setAddress] = useState('');
 
   const sortedStores = useMemo(() => {
     const copy = [...stores];
@@ -57,7 +64,20 @@ export default function NearbyStoresScreen({navigation}: Props) {
       setLoading(true);
       setError(null);
       try {
-        const data = await getNearbyStores();
+        const {status} = await Location.requestForegroundPermissionsAsync();
+        if (status !== Location.PermissionStatus.GRANTED) {
+          if (!cancelled) setManualMode(true);
+          if (!cancelled) setStores([]);
+          return;
+        }
+
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        const data = await getNearbyStoresSmart({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+        });
         if (!cancelled) setStores(data);
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? 'Failed to load stores.');
@@ -72,6 +92,24 @@ export default function NearbyStoresScreen({navigation}: Props) {
     };
   }, []);
 
+  async function onSearch() {
+    const q = address.trim();
+    if (!q) {
+      setError('Enter a location to search.');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getNearbyStoresSmart({address: q});
+      setStores(data);
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to search stores.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <View
       style={[
@@ -82,20 +120,49 @@ export default function NearbyStoresScreen({navigation}: Props) {
         <View style={styles.topbarLeft}>
           <Text style={styles.topTitle}>Nearby Stores</Text>
           <Text style={styles.topSubtitle}>Find groceries near you</Text>
-        </View>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('Cart')}
-          activeOpacity={0.8}
-          style={styles.cartBtn}>
-          <Ionicons name="cart-outline" size={22} color="#374151" />
-          {itemCount > 0 ? (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>
-                {itemCount > 99 ? '99+' : String(itemCount)}
-              </Text>
+          {isStoreOwner ? (
+            <View style={{marginTop: 10}}>
+              <ModeToggle
+                mode={mode}
+                onChange={next => {
+                  setMode(next);
+                  if (next === 'MERCHANT') {
+                    navigation.reset({
+                      index: 0,
+                      routes: [{name: 'MerchantDashboard'}],
+                    });
+                  }
+                }}
+              />
             </View>
           ) : null}
-        </TouchableOpacity>
+        </View>
+        <View style={styles.topbarRight}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Cart')}
+            activeOpacity={0.8}
+            style={styles.iconBtn}>
+            <Ionicons name="cart-outline" size={22} color="#374151" />
+            {itemCount > 0 ? (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {itemCount > 99 ? '99+' : String(itemCount)}
+                </Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Profile')}
+            activeOpacity={0.8}
+            style={styles.iconBtn}>
+            <Ionicons
+              name="person-circle-outline"
+              size={24}
+              color="#374151"
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (
@@ -159,6 +226,27 @@ export default function NearbyStoresScreen({navigation}: Props) {
           }}
         />
       )}
+
+      {!loading && manualMode ? (
+        <View style={styles.manual}>
+          <Text style={styles.manualTitle}>Enter location</Text>
+          <View style={styles.manualRow}>
+            <TextInput
+              value={address}
+              onChangeText={setAddress}
+              placeholder="e.g. Ikeja, Lagos"
+              placeholderTextColor="#9CA3AF"
+              style={styles.manualInput}
+            />
+            <TouchableOpacity
+              onPress={onSearch}
+              activeOpacity={0.9}
+              style={styles.manualBtn}>
+              <Text style={styles.manualBtnText}>Search</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -179,7 +267,8 @@ const styles = StyleSheet.create({
   topbarLeft: {flex: 1, paddingRight: 12},
   topTitle: {fontSize: 22, fontWeight: '900', color: '#16A34A'},
   topSubtitle: {marginTop: 2, fontSize: 12, color: '#6B7280', fontWeight: '600'},
-  cartBtn: {
+  topbarRight: {flexDirection: 'row', alignItems: 'center', gap: 10},
+  iconBtn: {
     width: 44,
     height: 44,
     borderRadius: 12,
@@ -233,5 +322,36 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(22,163,74,0.25)',
   },
   pillText: {color: '#16A34A', fontWeight: '900', fontSize: 12},
+
+  manual: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 16,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#EEF2F7',
+  },
+  manualTitle: {fontWeight: '900', color: '#111827', marginBottom: 8},
+  manualRow: {flexDirection: 'row', gap: 10, alignItems: 'center'},
+  manualInput: {
+    flex: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    color: '#111827',
+  },
+  manualBtn: {
+    backgroundColor: '#16A34A',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+  },
+  manualBtnText: {color: '#fff', fontWeight: '900'},
 });
 
